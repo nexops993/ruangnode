@@ -1,0 +1,36 @@
+{
+  "name": "@ruangnode/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RuangNode control plane API (authentication, catalog, orders, provisioning).",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/server.ts",
+      "default": "./src/server.ts"
+    },
+    "./auth/config": {
+      "types": "./src/auth/config.ts",
+      "default": "./src/auth/config.ts"
+    }
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cookie": "catalog:",
+    "@ruangnode/auth": "workspace:*",
+    "@ruangnode/database": "workspace:*",
+    "@ruangnode/shared": "workspace:*",
+    "fastify": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

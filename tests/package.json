@@ -1,0 +1,25 @@
+{
+  "name": "@ruangnode/tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-package integration tests for the RuangNode platform.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ruangnode/api": "workspace:*",
+    "@ruangnode/auth": "workspace:*",
+    "@ruangnode/database": "workspace:*",
+    "@ruangnode/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "catalog:",
+    "@electric-sql/pglite-socket": "catalog:",
+    "@types/node": "catalog:",
+    "fastify": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

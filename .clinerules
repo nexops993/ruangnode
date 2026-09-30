@@ -1,0 +1,211 @@
+# RuangNode Cline Rules
+
+## Project identity
+
+Project name: RuangNode Domain: ruangnode.me
+
+RuangNode is a commercial digital-product marketplace and managed
+application hosting platform.
+
+## Primary engineering rule
+
+Build for the intended full architecture.
+
+Do not intentionally create a disposable MVP, fake backend, mock
+provisioning system, or cosmetic resource system unless a task
+explicitly requests a mock/test implementation.
+
+## Architecture boundaries
+
+Keep these responsibilities separate:
+
+- Web UI
+- Customer panel
+- Admin panel
+- Control Plane API
+- Database
+- Payment providers
+- Provisioning engine
+- Node scheduler
+- Node Agent
+- Docker runtime
+
+The frontend must never directly control Docker.
+
+The public internet must never receive unrestricted Docker socket
+access.
+
+## Multi-tenant security
+
+Every customer-owned resource must be authorized against the
+authenticated user.
+
+Never trust: - user IDs from request bodies - instance IDs without
+ownership checks - product IDs for authorization - filenames - paths -
+webhook payloads without verification
+
+Prevent: - IDOR - path traversal - secret leakage - cross-tenant data
+access - host escape - arbitrary host command execution
+
+## Resource isolation
+
+Resource limits must be enforced by infrastructure.
+
+Never implement a UI-only limit.
+
+Managed instances should use appropriate container controls such as: -
+CPU limits - memory limits - swap policy - PID limits - storage limits -
+network controls when supported
+
+The Node Agent is responsible for applying and verifying resource
+limits.
+
+## Node Agent
+
+The Node Agent runs on infrastructure nodes.
+
+It may: - create containers - delete containers - start/stop/restart
+containers - update resource limits - collect metrics - retrieve logs -
+perform health checks - perform explicitly authorized file operations -
+provide controlled console functionality
+
+It must not expose arbitrary host shell access to customers.
+
+All control-plane-to-agent communication must be authenticated.
+
+Prefer an outbound/secure agent connection model where practical so the
+control plane does not require an openly exposed privileged Docker API.
+
+## Secrets
+
+Never commit: - API keys - passwords - private keys - payment secrets -
+database passwords - session secrets - Cloudflare tokens - provider
+credentials
+
+Use environment variables or a proper secret-management mechanism.
+
+Never print secrets to logs.
+
+## Database
+
+Use strong relational modeling.
+
+Keep these concepts distinct:
+
+User Product ResourceProfile Order Payment Subscription Node Instance
+ProvisioningJob Credential Ticket AuditLog
+
+Do not collapse all service state into one giant table.
+
+## Payments
+
+Payment providers must be adapters.
+
+Do not couple the order system directly to one provider.
+
+Always verify webhook signatures.
+
+Never mark an order paid solely because the browser returned from a
+checkout page.
+
+## Provisioning
+
+Provisioning must be idempotent.
+
+Repeated webhook delivery must not create duplicate instances.
+
+Track provisioning state explicitly.
+
+Recommended state flow:
+
+PENDING → PAID → PROVISIONING → ACTIVE
+
+Failure states must be recoverable.
+
+## UI
+
+Use the RuangNode Neo-Brutalist design system.
+
+Required visual language: - black borders - hard shadows - high
+contrast - bold typography - electric blue - purple - pink - yellow -
+cyan - green - generous whitespace
+
+Avoid generic SaaS styling.
+
+Do not replace the design with glassmorphism or a default dashboard
+template.
+
+## UX
+
+The customer should understand: - what they bought - what resources they
+receive - where the service is running - whether it is online - what it
+is using - how to configure it - how to renew/upgrade - how to get
+support
+
+## TypeScript
+
+Prefer: - strict typing - explicit interfaces/types - schema validation
+at boundaries - small modules - dependency injection for infrastructure
+adapters - testable services
+
+Avoid: - `any` unless justified - giant files - global mutable state -
+hidden side effects
+
+## API
+
+API handlers should: 1. authenticate 2. authorize 3. validate input 4.
+execute service logic 5. return a stable response
+
+Never put business logic directly into UI components.
+
+## Errors
+
+Errors should be: - structured - safe for users - detailed in server
+logs - free of secrets
+
+Do not expose stack traces in production.
+
+## Testing
+
+Important areas require tests: - authorization - resource ownership -
+pricing/order calculations - webhook verification - provisioning
+idempotency - resource profile application - Node Agent authentication -
+tenant isolation
+
+## Dependencies
+
+Do not add a dependency merely because it is convenient.
+
+Before introducing a new major dependency: - verify it solves a real
+architectural need - consider maintenance - consider security - consider
+bundle/runtime cost
+
+## Documentation
+
+When architecture changes, update the corresponding documentation.
+
+Important decisions must not exist only in chat history.
+
+## Coding workflow
+
+Before implementing a major feature: 1. inspect the current architecture
+2. identify affected boundaries 3. update types/schema if necessary 4.
+implement backend/domain logic 5. implement API 6. implement UI 7. add
+tests 8. update documentation
+
+Do not silently redesign unrelated subsystems.
+
+## Completion criteria
+
+A task is not complete merely because the UI renders.
+
+For infrastructure-backed features, verify the real behavior.
+
+For example, a resource limit feature is incomplete if it only displays
+“2 GB” without enforcing a 2 GB container limit.
+
+## Brand
+
+Always use: - RuangNode - ruangnode.me
+
+Do not rename the project to NexOps or another previous project name.

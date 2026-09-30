@@ -1,0 +1,65 @@
+# ---------------------------------------------------------------------------
+# RuangNode .gitignore
+# Never commit secrets: .env files, keys, credentials or provider tokens.
+# ---------------------------------------------------------------------------
+
+# Dependencies
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+
+# Generated code (Prisma Client is produced by `prisma generate`)
+**/generated/
+**/src/generated/
+
+# Build output
+dist/
+build/
+out/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# Tests and coverage
+coverage/
+.vitest/
+test-results/
+playwright-report/
+
+# Environment files (only the example is tracked)
+.env
+.env.*
+!.env.example
+
+# Logs and local runtime state
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.pid
+*.seed
+*.pid.lock
+
+# Secrets and certificates
+*.pem
+*.key
+*.crt
+!infra/**/*.example
+
+# Local infrastructure state (volumes, dumps, generated configs)
+infra/local/
+*.sql.gz
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+!.vscode/extensions.json
+
+# Misc
+*.local
+*.tgz
+.cache/

@@ -1,0 +1,31 @@
+{
+  "name": "@ruangnode/auth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authentication, session handling and authorization primitives.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "default": "./src/testing/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "catalog:",
+    "@ruangnode/database": "workspace:*",
+    "@ruangnode/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

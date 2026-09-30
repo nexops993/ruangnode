@@ -1,0 +1,911 @@
+// ---------------------------------------------------------------------------
+// RuangNode — PostgreSQL schema (Prisma ORM 7)
+//
+// Source of truth for the *shape* of this schema: docs/DATABASE.md.
+// Every deviation or added column is recorded in docs/DECISIONS.md (D-015 …).
+//
+// Conventions used throughout this file:
+//   - every primary key is a UUIDv7 (`@default(uuid(7)) @db.Uuid`), generated
+//     server-side; identifiers are never customer-controlled strings
+//   - money is stored as an integer number of minor units (`BigInt`), never
+//     floating point (docs/PAYMENTS.md)
+//   - byte quantities (memory, disk) are stored as `BigInt` bytes in
+//     unambiguous units (docs/RESOURCE_ISOLATION.md)
+//   - CPU is stored in millicores (`Int`), 1000 millicores = 1 CPU
+//   - order, payment, subscription, provisioning, instance and node states are
+//     separate enums/columns; they are never collapsed into one status field
+//   - `Json` columns are only used for non-secret, non-authoritative payloads.
+//     Secrets are encrypted into `Credential`, never into JSON
+//   - application code is responsible for normalizing values (e.g. lower-cased
+//     e-mail addresses); the database enforces identity and uniqueness
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "js"
+}
+
+datasource db {
+  // The connection URL lives in prisma.config.ts (Prisma 7 removed `url` from
+  // the datasource block); the runtime connection is created by
+  // src/client.ts through the pg driver adapter.
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// Assigned server-side only. A role sent by a client is never trusted.
+enum UserRole {
+  CUSTOMER
+  SUPPORT
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum ProductType {
+  DIGITAL
+  MANAGED_SERVICE
+  SUBSCRIPTION
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum BillingPeriod {
+  ONE_TIME
+  MONTHLY
+  YEARLY
+}
+
+/// Commercial state of an order (docs/PAYMENTS.md).
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+  REFUNDED
+}
+
+/// Provider payment state. Deliberately separate from OrderStatus.
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+  REFUNDED
+}
+
+/// Entitlement state. Deliberately separate from payment and instance state.
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+/// Fleet state of an infrastructure node.
+enum NodeStatus {
+  PROVISIONING
+  ONLINE
+  DEGRADED
+  OFFLINE
+  DRAINING
+  MAINTENANCE
+}
+
+/// Runtime state of a managed instance.
+enum InstanceStatus {
+  PENDING
+  PROVISIONING
+  STARTING
+  ACTIVE
+  STOPPED
+  RESTARTING
+  ERROR
+  SUSPENDED
+  DELETING
+  DELETED
+}
+
+enum ProvisioningOperation {
+  CREATE
+  DELETE
+  START
+  STOP
+  RESTART
+  UPDATE_RESOURCES
+  UPDATE_CONFIGURATION
+}
+
+/// State of a provisioning job. Deliberately separate from instance state.
+enum ProvisioningJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum InstanceDomainType {
+  SYSTEM_SUBDOMAIN
+  CUSTOM_DOMAIN
+}
+
+enum DomainVerificationStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+enum DomainTlsStatus {
+  PENDING
+  ACTIVE
+  FAILED
+  EXPIRED
+}
+
+enum SupportTicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+/// How the swap limit of a resource profile is derived.
+enum MemorySwapPolicy {
+  /// Swap is disabled for the container.
+  DISABLED
+  /// Swap limit equals the memory limit (no swap headroom).
+  EQUAL_TO_MEMORY
+  /// Swap limit is an explicit bounded value (`memorySwapBytes`).
+  BOUNDED
+}
+
+/// How a disk limit is expected to be enforced by the runtime.
+/// See docs/RESOURCE_ISOLATION.md — a hard quota may not be claimable on
+/// every storage backend, and the difference must be visible.
+enum DiskPolicy {
+  /// A real quota is enforced by the storage mechanism.
+  ENFORCED_QUOTA
+  /// Capacity is reserved at scheduling time but not hard-enforced.
+  ALLOCATED
+  /// Usage is tracked only; nothing is enforced.
+  MONITORED
+}
+
+/// An account. Role and status are server-owned fields.
+model User {
+  id       String  @id @default(uuid(7)) @db.Uuid
+  email    String  @unique
+  name     String?
+  /// Set when password authentication is used. Never a plaintext password.
+  passwordHash String?
+
+  /// External identity (OIDC/OAuth) when the account does not use a password.
+  externalAuthProvider String?
+  externalAuthSubject  String?
+
+  role   UserRole   @default(CUSTOMER)
+  status UserStatus @default(ACTIVE)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+
+  orders          Order[]
+  subscriptions   Subscription[]
+  instances       Instance[]
+  credentials     Credential[]
+  tickets         SupportTicket[]
+  supportMessages SupportMessage[]
+  auditLogs       AuditLog[]
+  downloads       Download[]
+  sessions        Session[]
+  passwordResetTokens PasswordResetToken[]
+
+  /// One external identity may only be attached to one account.
+  @@unique([externalAuthProvider, externalAuthSubject])
+  @@index([role, status])
+  @@index([createdAt])
+}
+
+/// Something that can be sold. `serviceType` stays a free string because
+/// service types are extensible (Hermes is one of them) — see docs/DATABASE.md.
+model Product {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  slug        String        @unique
+  name        String
+  description String?
+  type        ProductType
+  status      ProductStatus @default(DRAFT)
+  serviceType String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants  ProductVariant[]
+  downloads Download[]
+
+  @@index([type, status])
+  @@index([serviceType, status])
+}
+
+/// A purchasable plan of a product.
+model ProductVariant {
+  id        String @id @default(uuid(7)) @db.Uuid
+  productId String @db.Uuid
+
+  name String
+  sku  String @unique
+
+  /// Integer minor units of `currency` (e.g. IDR 40,000 is 40000).
+  price    BigInt
+  currency String
+
+  billingPeriod BillingPeriod @default(ONE_TIME)
+
+  /// Required for managed services, null for pure digital products.
+  resourceProfileId String? @db.Uuid
+
+  /// Advertised storage allowance in bytes (digital assets or managed disk).
+  storageQuota BigInt?
+
+  /// JSON Schema describing the configuration a customer may submit for an
+  /// instance of this variant. Schema only — never secret values.
+  configurationSchema Json?
+
+  status ProductStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product         Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  resourceProfile ResourceProfile? @relation(fields: [resourceProfileId], references: [id], onDelete: Restrict)
+
+  orderItems    OrderItem[]
+  subscriptions Subscription[]
+  instances     Instance[]
+
+  @@index([productId])
+  @@index([resourceProfileId])
+  @@index([status])
+}
+
+/// The enforceable resource class of a managed service.
+///
+/// Values are stored in unambiguous units so the Node Agent can translate them
+/// into runtime limits (Docker `--cpus`, `--memory`, `--memory-swap`,
+/// `--pids-limit`, storage policy). Profiles are deactivated, never silently
+/// changed, because instances reference them for reconciliation.
+model ResourceProfile {
+  id   String @id @default(uuid(7)) @db.Uuid
+  name String @unique
+
+  /// CPU limit in millicores (1000 millicores = 1 CPU).
+  cpuLimit Int
+
+  /// Hard memory limit in bytes.
+  memoryLimitBytes BigInt
+
+  /// Swap limit in bytes. Only set when `memorySwapPolicy` is BOUNDED;
+  /// otherwise the effective value is derived from the policy.
+  memorySwapBytes BigInt?
+
+  memorySwapPolicy MemorySwapPolicy @default(EQUAL_TO_MEMORY)
+
+  /// Disk allowance in bytes.
+  diskLimitBytes BigInt
+
+  /// How `diskLimitBytes` is expected to be enforced (quota vs allocation vs
+  /// monitoring only).
+  diskPolicy DiskPolicy @default(ALLOCATED)
+
+  /// Maximum number of processes/threads. Always a positive bound.
+  pidsLimit Int
+
+  /// Extensible, provider-dependent network policy identifier
+  /// (e.g. UNMETERED, METERED_EGRESS, RESTRICTED). A bandwidth cap is never
+  /// implied unless the runtime can enforce it.
+  networkPolicy String?
+
+  description String?
+  active      Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants  ProductVariant[]
+  instances Instance[]
+
+  @@index([active])
+}
+
+/// A commercial purchase. Order state changes happen inside transactions and
+/// are driven by verified provider webhooks, never by a browser redirect.
+model Order {
+  id     String      @id @default(uuid(7)) @db.Uuid
+  userId String      @db.Uuid
+  status OrderStatus @default(PENDING)
+
+  /// ISO 4217 alpha-3 code shared by every monetary column of this order.
+  currency String
+
+  /// Integer minor units. `total` = `subtotal` - `discount` (validated by the
+  /// order service before the row is written).
+  subtotal BigInt
+  discount BigInt @default(0)
+  total    BigInt
+
+  /// Payment deadline used to move a PENDING order to EXPIRED.
+  expiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items    OrderItem[]
+  payments Payment[]
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+/// A line of an order. Commercial information is snapshotted so historical
+/// orders stay correct after a product or price change.
+model OrderItem {
+  id               String @id @default(uuid(7)) @db.Uuid
+  orderId          String @db.Uuid
+  productVariantId String @db.Uuid
+
+  quantity Int @default(1)
+
+  /// Integer minor units, snapshotted at purchase time.
+  unitPrice  BigInt
+  totalPrice BigInt
+
+  /// Snapshot of product/variant/commercial/resource-profile values at the
+  /// moment of purchase. Non-secret data only.
+  metadataSnapshot Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+
+  subscriptions Subscription[]
+
+  @@index([orderId])
+  @@index([productVariantId])
+}
+
+/// A provider payment attempt/result. Provider-agnostic: the concrete provider
+/// is identified by `provider` and implemented as an adapter.
+model Payment {
+  id      String @id @default(uuid(7)) @db.Uuid
+  orderId String @db.Uuid
+
+  provider          String
+  providerPaymentId String
+
+  status PaymentStatus @default(PENDING)
+
+  /// Integer minor units of `currency`; must match the order total.
+  amount   BigInt
+  currency String
+
+  paidAt DateTime?
+
+  /// Opaque provider-side reference (checkout reference, event id, or a pointer
+  /// to the stored raw payload). Never a raw payload containing secrets.
+  rawReference String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// A provider payment can only ever be attached to one order.
+  @@unique([provider, providerPaymentId])
+  @@index([orderId])
+  @@index([status])
+}
+
+/// An ongoing entitlement. Billing state is kept separate from order,
+/// payment and instance state.
+model Subscription {
+  id        String             @id @default(uuid(7)) @db.Uuid
+  userId    String             @db.Uuid
+  orderItemId String?          @db.Uuid
+  productVariantId String      @db.Uuid
+  status    SubscriptionStatus @default(PENDING)
+
+  startsAt           DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+
+  /// Set when the customer cancels but keeps access until the period ends.
+  cancelAtPeriodEnd Boolean   @default(false)
+  cancelledAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  orderItem      OrderItem?     @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+
+  instances Instance[]
+
+  /// One order item produces at most one subscription, so repeated webhook
+  /// delivery cannot create duplicate entitlements.
+  @@unique([orderItemId])
+  @@index([userId, status])
+  @@index([status, currentPeriodEnd])
+  @@index([productVariantId])
+}
+
+/// An infrastructure node that can host managed instances.
+///
+/// `allocated*` columns are a cache used for scheduling; they must be
+/// periodically reconciled against actual instance state (docs/DATABASE.md).
+model Node {
+  id       String     @id @default(uuid(7)) @db.Uuid
+  name     String     @unique
+  provider String?
+  region   String?
+  hostname String
+
+  /// Version reported by the Node Agent on its last heartbeat.
+  agentVersion String?
+
+  /// Hash of the long-lived agent credential issued at registration. The
+  /// plaintext credential is returned exactly once and never stored.
+  agentTokenHash String?
+
+  status NodeStatus @default(PROVISIONING)
+
+  /// Physical/allocatable capacity.
+  totalCpuMillicores Int
+  totalMemoryBytes   BigInt
+  totalStorageBytes  BigInt
+
+  /// Host overhead that must never be handed to customer instances
+  /// (docs/RESOURCE_ISOLATION.md → "Node capacity").
+  reservedCpuMillicores Int    @default(0)
+  reservedMemoryBytes   BigInt @default(0)
+  reservedStorageBytes  BigInt @default(0)
+
+  /// Cached sum of resources handed to instances.
+  allocatedCpuMillicores Int    @default(0)
+  allocatedMemoryBytes   BigInt @default(0)
+  allocatedStorageBytes  BigInt @default(0)
+
+  lastHeartbeatAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  heartbeats       NodeHeartbeat[]
+  instances        Instance[]
+  provisioningJobs ProvisioningJob[]
+
+  @@index([status])
+  @@index([region, status])
+  @@index([agentTokenHash])
+}
+
+/// One reported heartbeat of a node. Retention/pruning is an operational
+/// concern; the rows are append-only.
+model NodeHeartbeat {
+  id     String @id @default(uuid(7)) @db.Uuid
+  nodeId String @db.Uuid
+
+  agentVersion  String?
+  uptimeSeconds BigInt?
+
+  totalCpuMillicores Int?
+  totalMemoryBytes   BigInt?
+  totalStorageBytes  BigInt?
+
+  allocatedCpuMillicores Int?
+  allocatedMemoryBytes   BigInt?
+  allocatedStorageBytes  BigInt?
+
+  /// Whether the local container runtime was healthy at report time.
+  dockerHealthy Boolean?
+
+  /// Status the agent believes the node is in (used to detect divergence).
+  reportedStatus NodeStatus?
+
+  createdAt DateTime @default(now())
+
+  node Node @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId, createdAt(sort: Desc)])
+}
+
+/// A deployed managed service.
+///
+/// The row itself never grants authorization: every read/write must verify
+/// ownership or an explicit admin permission (docs/DATABASE.md).
+model Instance {
+  id String @id @default(uuid(7)) @db.Uuid
+
+  userId           String  @db.Uuid
+  subscriptionId   String? @db.Uuid
+  productVariantId String  @db.Uuid
+
+  resourceProfileId String  @db.Uuid
+  nodeId            String? @db.Uuid
+
+  /// Display name chosen by the customer (never used as an identifier).
+  name String
+
+  /// Routing label used for the system subdomain; globally unique so a
+  /// hostname can only ever resolve to one instance.
+  slug String @unique
+
+  /// Identifier of the runtime object (e.g. the container ID) as reported by
+  /// the Node Agent. Unique per node, not globally.
+  runtimeId String?
+
+  status InstanceStatus @default(PENDING)
+  region String?
+
+  /// Non-secret service configuration, validated against the variant's
+  /// `configurationSchema`. Secrets belong in `Credential`.
+  configuration Json?
+
+  /// Node-local storage location owned by this instance. Internal field; never
+  /// returned to customers and never accepted from them.
+  storagePath String?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastHealthAt DateTime?
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  subscription    Subscription?   @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  productVariant  ProductVariant  @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  resourceProfile ResourceProfile @relation(fields: [resourceProfileId], references: [id], onDelete: Restrict)
+  node            Node?           @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+
+  credentials      Credential[]
+  domains          InstanceDomain[]
+  provisioningJobs ProvisioningJob[]
+
+  @@unique([nodeId, runtimeId])
+  @@index([userId, status])
+  @@index([nodeId, status])
+  @@index([status])
+  @@index([subscriptionId])
+  @@index([productVariantId])
+  @@index([resourceProfileId])
+}
+
+/// An explicitly tracked, idempotent provisioning operation.
+///
+/// `idempotencyKey` is globally unique: a repeated request with the same key
+/// resolves to the same job instead of creating a second instance
+/// (docs/PROVISIONING.md).
+model ProvisioningJob {
+  id         String @id @default(uuid(7)) @db.Uuid
+  instanceId String @db.Uuid
+
+  /// Node the job was dispatched to, when known.
+  nodeId String? @db.Uuid
+
+  operation ProvisioningOperation
+  status    ProvisioningJobStatus @default(PENDING)
+
+  idempotencyKey String @unique
+
+  attemptCount Int @default(0)
+
+  /// Safe error category (e.g. NODE_UNAVAILABLE, RUNTIME_ERROR) and a safe,
+  /// customer-presentable message. Raw infrastructure errors stay in logs.
+  errorCategory String?
+  lastError     String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  node     Node?    @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+
+  @@index([instanceId, createdAt])
+  @@index([status, createdAt])
+  @@index([nodeId])
+}
+
+/// A secret owned by a user and/or an instance (BYOK API keys, bot tokens, …).
+///
+/// Secrets are never stored in plaintext: `encryptedSecret` holds the
+/// ciphertext of an authenticated envelope encryption scheme and the remaining
+/// `encryption*` columns hold everything needed to decrypt it. The plaintext is
+/// only decrypted inside the control plane when a value must be applied to an
+/// instance, and is never returned by list APIs (docs/SECURITY.md).
+model Credential {
+  id     String  @id @default(uuid(7)) @db.Uuid
+  userId String  @db.Uuid
+
+  /// Null for account-level credentials, set for instance-scoped ones.
+  instanceId String? @db.Uuid
+
+  /// Extensible provider identifier (e.g. OPENAI, TELEGRAM, HERMES).
+  provider String
+
+  /// Ciphertext of the secret. Never plaintext, never logged, never returned.
+  encryptedSecret String
+
+  /// Envelope parameters required to decrypt `encryptedSecret`.
+  encryptionAlgorithm  String @default("aes-256-gcm")
+  encryptionKeyVersion Int    @default(1)
+  encryptionIv         String
+  encryptionAuthTag    String
+
+  /// Non-secret descriptive data (scopes, labels, rotation hints).
+  /// Never store secret material here.
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instance Instance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+
+  @@index([userId, provider])
+  @@index([instanceId])
+}
+
+/// A hostname routed to an instance. Custom domains must be verified before
+/// they are activated (docs/API.md).
+model InstanceDomain {
+  id         String @id @default(uuid(7)) @db.Uuid
+  instanceId String @db.Uuid
+
+  /// Globally unique: one hostname resolves to exactly one instance.
+  hostname String @unique
+
+  type InstanceDomainType @default(SYSTEM_SUBDOMAIN)
+
+  verificationStatus DomainVerificationStatus @default(PENDING)
+
+  /// DNS TXT challenge value. Not a credential; only valid for verification.
+  verificationToken String?
+  verifiedAt        DateTime?
+
+  tlsStatus DomainTlsStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  instance Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@index([verificationStatus])
+}
+
+/// A support ticket. Messages are stored separately (docs/DATABASE.md).
+model SupportTicket {
+  id      String @id @default(uuid(7)) @db.Uuid
+  userId  String @db.Uuid
+  subject String
+
+  status   SupportTicketStatus   @default(OPEN)
+  priority SupportTicketPriority @default(NORMAL)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  messages SupportMessage[]
+
+  @@index([userId, status])
+  @@index([status, priority])
+}
+
+/// A single message (or internal note) of a support ticket.
+model SupportMessage {
+  id       String @id @default(uuid(7)) @db.Uuid
+  ticketId String @db.Uuid
+
+  /// Author of the message; null when written by the platform/system.
+  authorUserId String? @db.Uuid
+
+  body String
+
+  /// Internal notes are never exposed to the customer.
+  internal Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User?         @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@index([authorUserId])
+}
+
+/// Append-only audit trail. `metadata` must never contain secrets.
+model AuditLog {
+  id String @id @default(uuid(7)) @db.Uuid
+
+  /// Null for system-initiated actions (schedulers, reconcilers, webhooks).
+  actorUserId String? @db.Uuid
+
+  /// Stable machine-readable action name (e.g. instance.provisioning.requested).
+  action String
+
+  resourceType String
+  resourceId   String?
+
+  metadata Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([action, createdAt])
+}
+
+/// A received provider webhook. Unique per (provider, externalEventId) so
+/// repeated delivery can never be processed twice (docs/PAYMENTS.md).
+model WebhookEvent {
+  id String @id @default(uuid(7)) @db.Uuid
+
+  provider        String
+  externalEventId String
+  eventType       String?
+
+  /// Result of the provider signature verification. Events that fail
+  /// verification are recorded but must never be processed.
+  signatureVerified Boolean @default(false)
+
+  /// Hash of the raw request body, used for replay detection and audit.
+  payloadHash String
+
+  /// Set when processing completed successfully.
+  processedAt DateTime?
+
+  /// Safe error summary when processing failed and can be retried by an admin.
+  processingError String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([provider, externalEventId])
+  @@index([provider, eventType])
+  @@index([processedAt])
+}
+
+/// Delivery state for a protected digital asset. Assets themselves live in
+/// object storage and are only served through authorized downloads.
+model Download {
+  id String @id @default(uuid(7)) @db.Uuid
+
+  userId    String @db.Uuid
+  productId String @db.Uuid
+
+  /// Opaque storage asset identifier (never a customer-supplied path).
+  assetId String
+
+  downloadCount    Int       @default(0)
+  lastDownloadedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, productId, assetId])
+  @@index([userId])
+  @@index([productId])
+}
+
+// ---------------------------------------------------------------------------
+// Authentication (Phase 1B)
+//
+// Both tables store only a *hash* of the bearer secret. The plaintext value
+// exists exactly once: in the cookie the browser holds (session) or in the
+// single-use reset link (password reset). Neither is ever stored, logged or
+// returned by an API (docs/SECURITY.md).
+// ---------------------------------------------------------------------------
+
+/// Why a session stopped being usable. Null while the session is active.
+enum SessionRevocationReason {
+  LOGOUT
+  LOGOUT_ALL
+  PASSWORD_RESET
+  ADMIN_REVOKED
+}
+
+/// A revocable, database-backed session.
+///
+/// `tokenHash` is the SHA-256 hash of the session token. Session validity is
+/// decided from this table on every request, so revocation takes effect
+/// immediately and does not depend on any client-side state.
+model Session {
+  id     String @id @default(uuid(7)) @db.Uuid
+  userId String @db.Uuid
+
+  /// SHA-256 of the session token (hex). Unique so a token maps to one session.
+  tokenHash String @unique
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  expiresAt  DateTime
+  lastUsedAt DateTime @default(now())
+
+  revokedAt     DateTime?
+  revokedReason SessionRevocationReason?
+
+  ipAddress String?
+  userAgent String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// "Active sessions of a user" and expiry-based cleanup.
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+/// A single-use, expiring password-reset token.
+///
+/// Only the hash is stored. `usedAt` is the single-use marker: the confirmation
+/// step consumes the row with a conditional update, so a token can never be
+/// redeemed twice even under concurrent requests.
+model PasswordResetToken {
+  id     String @id @default(uuid(7)) @db.Uuid
+  userId String @db.Uuid
+
+  /// SHA-256 of the reset token (hex).
+  tokenHash String @unique
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  requestedIp        String?
+  requestedUserAgent String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+

@@ -1,0 +1,73 @@
+# ---------------------------------------------------------------------------
+# RuangNode pnpm workspace
+#
+# Workspace projects:
+#   apps/*      -> deployable applications (web UI, control plane API)
+#   packages/*  -> shared libraries (database, auth, shared, services, ui)
+#   node-agent  -> trusted service running on infrastructure nodes
+#   tests       -> cross-package integration test project
+#
+# Dependency versions are declared once in the catalog below and referenced
+# from each project with `"catalog:"`. Bump a version here, not in every
+# package.json.
+# ---------------------------------------------------------------------------
+
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'node-agent'
+  - 'tests'
+
+# Build scripts are blocked by default; only these dependencies may run them.
+# esbuild ships the native binary used by Vite/Vitest and tsx.
+# prisma / @prisma/engines install the CLI's schema + migration engine binaries;
+# without them `prisma migrate` and `prisma validate` cannot run.
+allowBuilds:
+  esbuild: true
+  prisma: true
+  '@prisma/engines': true
+
+catalog:
+  # Toolchain
+  '@eslint/js': ^10.0.1
+  eslint: ^10.11.0
+  globals: ^17.12.0
+  prettier: ^3.9.9
+  typescript: ^5.9.3
+  typescript-eslint: ^8.71.0
+  vitest: ^5.0.2
+
+  # Node runtime types and TypeScript service runner
+  '@types/node': ^22.20.4
+  tsx: ^4.23.15
+
+  # Control plane API runtime
+  fastify: ^5.12.5
+  # Session cookies (httpOnly / secure / sameSite) for the control plane API.
+  '@fastify/cookie': ^11.1.2
+
+  # Authentication (packages/auth).
+  # @node-rs/argon2 ships prebuilt N-API binaries (no install-time build step)
+  # and provides Argon2id, which docs/SECURITY.md requires for password hashing.
+  '@node-rs/argon2': ^2.2.1
+
+  # Database (packages/database) — Prisma ORM 7 over PostgreSQL.
+  # @prisma/adapter-pg is required by Prisma 7: the client is engine-free and
+  # talks to PostgreSQL through the pg driver adapter.
+  prisma: ^7.10.0
+  '@prisma/client': ^7.10.0
+  '@prisma/adapter-pg': ^7.10.0
+
+  # Web application runtime
+  next: ^16.3.7
+  react: ^19.3.0
+  react-dom: ^19.3.0
+  '@types/react': ^19.3.0
+  '@types/react-dom': ^19.3.0
+
+  # Cross-package integration tests (tests/).
+  # PGlite is PostgreSQL compiled to WebAssembly; the socket server exposes it
+  # over the PostgreSQL wire protocol, so the integration tests exercise the real
+  # Prisma queries and migrations without an external database service.
+  '@electric-sql/pglite': ^0.4.3
+  '@electric-sql/pglite-socket': ^0.1.3
