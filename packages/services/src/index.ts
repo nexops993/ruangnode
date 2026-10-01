@@ -73,3 +73,12 @@ export * from './resources/types.js';
 export * from './resources/validation.js';
 
 export * from './adapters/prisma-commerce-store.js';
+export * from './adapters/prisma-infrastructure-store.js';
+export * from './infrastructure/errors.js';
+export * from './infrastructure/instance-service.js';
+export * from './infrastructure/node-registry.js';
+export * from './infrastructure/ports.js';
+export * from './infrastructure/provisioning-service.js';
+export * from './infrastructure/scheduler.js';
+export * from './infrastructure/storage.js';
+export * from './infrastructure/types.js';

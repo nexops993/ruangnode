@@ -16,4 +16,5 @@
  *     memory-swap, PIDs, storage) and reports runtime-confirmed values
  *   - no arbitrary host shell access is ever exposed to customers
  */
-export {};
+export * from './docker.js';
+export * from './types.js';

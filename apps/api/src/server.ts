@@ -19,6 +19,7 @@ import { authConfigFromEnv, type AuthConfig } from './auth/config.js';
 import { AUTH_ROUTE_PREFIX, registerAuthRoutes } from './auth/routes.js';
 import { registerCommerceRoutes, type CommerceRoutesOptions } from './commerce/routes.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerInfrastructureRoutes, type InfrastructureRoutesOptions } from './infrastructure/routes.js';
 import { isValidationError, validationError } from './validation.js';
 
 /**
@@ -68,6 +69,7 @@ export interface BuildServerOptions {
    * their guards, so they are registered only together with `auth`.
    */
   commerce?: CommerceModuleOptions;
+  infrastructure?: InfrastructureRoutesOptions;
 }
 
 /**
@@ -143,6 +145,9 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       const authService = registerAuthentication(app, options.auth, authConfig);
 
       registerCommerce(app, authService, authConfig.cookie, options.commerce);
+      if (options.infrastructure !== undefined) {
+        registerInfrastructureRoutes(app, options.infrastructure, authService, authConfig.cookie);
+      }
     }
   } else {
     app.log.warn(
