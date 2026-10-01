@@ -16,6 +16,8 @@ import { systemClock, type Clock } from './clock.js';
 import { OrderService } from './orders/order-service.js';
 import type { CommerceStore } from './ports.js';
 import { ResourceProfileService } from './resources/resource-profile-service.js';
+import { deterministicPaymentAdapter, PaymentService } from './payments/payment-service.js';
+import type { PaymentProviderAdapter } from './payments/types.js';
 
 export interface CommerceServices {
   /** Customer-safe read model (products + variants + resource classes). */
@@ -28,6 +30,7 @@ export interface CommerceServices {
   resourceProfiles: ResourceProfileService;
   /** Customer orders: creation, listing, reading and guarded cancellation. */
   orders: OrderService;
+  payments: PaymentService;
 }
 
 export interface CreateCommerceServicesOptions {
@@ -35,6 +38,7 @@ export interface CreateCommerceServicesOptions {
   clock?: Clock;
   /** Payment deadline applied to a new order. Defaults to 24 hours. */
   paymentWindowMs?: number;
+  paymentProviders?: readonly PaymentProviderAdapter[];
 }
 
 export function createCommerceServices(
@@ -54,6 +58,16 @@ export function createCommerceServices(
       ...(options.paymentWindowMs === undefined
         ? {}
         : { paymentWindowMs: options.paymentWindowMs }),
+    }),
+    payments: new PaymentService({
+      store,
+      clock,
+      providers: new Map(
+        (options.paymentProviders ?? [deterministicPaymentAdapter()]).map((provider) => [
+          provider.provider,
+          provider,
+        ]),
+      ),
     }),
   };
 }

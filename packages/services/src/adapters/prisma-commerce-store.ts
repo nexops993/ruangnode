@@ -22,6 +22,7 @@ import { Prisma, type PrismaClient } from '@ruangnode/database';
 import type { ProductRecord, ProductVariantRecord } from '../catalog/types.js';
 import { duplicateProductSlugError, duplicateVariantSkuError } from '../errors.js';
 import type { OrderItemMetadataSnapshot, OrderRecord, OrderStatus } from '../orders/types.js';
+import type { PaymentRecord, WebhookEventRecord } from '../payments/types.js';
 import { isOrderItemSnapshot } from '../orders/serialization.js';
 import type {
   CommerceStore,
@@ -36,6 +37,9 @@ import type {
   ResourceProfileWriteData,
   VariantListFilter,
   VariantWriteData,
+  AuditRepository,
+  PaymentRepository,
+  WebhookRepository,
 } from '../ports.js';
 import type { ResourceProfileRecord } from '../resources/types.js';
 
@@ -229,6 +233,48 @@ function toOrderRecord(row: OrderRow): OrderRecord {
       metadataSnapshot: toSnapshot(item.metadataSnapshot),
     })),
   };
+}
+
+function toPaymentRecord(row: {
+  id: string;
+  orderId: string;
+  provider: string;
+  providerPaymentId: string;
+  status: PaymentRecord['status'];
+  amount: bigint;
+  currency: string;
+  paidAt: Date | null;
+  rawReference: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): PaymentRecord {
+  return {
+    id: row.id,
+    orderId: row.orderId,
+    provider: row.provider,
+    providerPaymentId: row.providerPaymentId,
+    status: row.status,
+    amountMinor: row.amount,
+    currency: row.currency,
+    paidAt: row.paidAt,
+    rawReference: row.rawReference,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function toWebhookRecord(row: {
+  id: string;
+  provider: string;
+  externalEventId: string;
+  eventType: string | null;
+  signatureVerified: boolean;
+  payloadHash: string;
+  processedAt: Date | null;
+  processingError: string | null;
+  createdAt: Date;
+}): WebhookEventRecord {
+  return row;
 }
 
 function buildProducts(client: PrismaLike): ProductRepository {
@@ -479,6 +525,88 @@ function buildOrders(client: PrismaLike): OrderRepository {
   };
 }
 
+function buildPayments(client: PrismaLike): PaymentRepository {
+  return {
+    async findById(paymentId) {
+      const row = await client.payment.findUnique({ where: { id: paymentId } });
+      return row === null ? null : toPaymentRecord(row);
+    },
+    async findByProviderPaymentId(provider, providerPaymentId) {
+      const row = await client.payment.findUnique({
+        where: { provider_providerPaymentId: { provider, providerPaymentId } },
+      });
+      return row === null ? null : toPaymentRecord(row);
+    },
+    async create(data) {
+      const row = await client.payment.create({
+        data: {
+          orderId: data.orderId,
+          provider: data.provider,
+          providerPaymentId: data.providerPaymentId,
+          status: data.status,
+          amount: data.amountMinor,
+          currency: data.currency,
+          rawReference: data.rawReference,
+        },
+      });
+      return toPaymentRecord(row);
+    },
+    async updateStatus(paymentId, from, to, paidAt, rawReference) {
+      const result = await client.payment.updateMany({
+        where: { id: paymentId, status: from },
+        data: { status: to, paidAt, rawReference },
+      });
+      return result.count === 1;
+    },
+  };
+}
+
+function buildWebhooks(client: PrismaLike): WebhookRepository {
+  return {
+    async find(provider, externalEventId) {
+      const row = await client.webhookEvent.findUnique({
+        where: { provider_externalEventId: { provider, externalEventId } },
+      });
+      return row === null ? null : toWebhookRecord(row);
+    },
+    async create(data) {
+      const row = await client.webhookEvent.create({
+        data: {
+          provider: data.provider,
+          externalEventId: data.externalEventId,
+          eventType: data.eventType,
+          signatureVerified: data.signatureVerified,
+          payloadHash: data.payloadHash,
+        },
+      });
+      return toWebhookRecord(row);
+    },
+    async markProcessed(id, processedAt) {
+      await client.webhookEvent.update({ where: { id }, data: { processedAt, processingError: null } });
+    },
+    async markFailed(id, processingError) {
+      await client.webhookEvent.update({ where: { id }, data: { processingError } });
+    },
+  };
+}
+
+function buildAudit(client: PrismaLike): AuditRepository {
+  return {
+    async record(event) {
+      await client.auditLog.create({
+        data: {
+          actorUserId: event.actorUserId ?? null,
+          action: event.action,
+          resourceType: event.resourceType,
+          resourceId: event.resourceId ?? null,
+          metadata: event.metadata === undefined ? undefined : (event.metadata as Prisma.InputJsonValue),
+          ...(event.createdAt === undefined ? {} : { createdAt: event.createdAt }),
+        },
+      });
+    },
+  };
+}
+
 /**
  * Creates the production commerce store.
  *
@@ -502,6 +630,9 @@ function buildStore(client: PrismaLike, transaction: CommerceStore['transaction'
     variants: buildVariants(client),
     resourceProfiles: buildResourceProfiles(client),
     orders: buildOrders(client),
+    payments: buildPayments(client),
+    webhooks: buildWebhooks(client),
+    audit: buildAudit(client),
     transaction,
   };
 }

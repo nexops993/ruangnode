@@ -212,7 +212,11 @@ describe('idempotency', () => {
 describe('state separation', () => {
   const STATES: ReadonlyArray<readonly [string, string, readonly string[]]> = [
     ['Order', 'OrderStatus', ['PENDING', 'PAID', 'FAILED', 'CANCELLED', 'EXPIRED', 'REFUNDED']],
-    ['Payment', 'PaymentStatus', ['PENDING', 'PAID', 'FAILED', 'CANCELLED', 'EXPIRED', 'REFUNDED']],
+    [
+      'Payment',
+      'PaymentStatus',
+      ['PENDING', 'PROCESSING', 'PAID', 'FAILED', 'CANCELLED', 'EXPIRED', 'REFUNDED'],
+    ],
     [
       'Subscription',
       'SubscriptionStatus',

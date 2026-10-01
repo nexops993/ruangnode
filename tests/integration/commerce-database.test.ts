@@ -1,8 +1,10 @@
 import { createDatabaseClient, type PrismaClient } from '@ruangnode/database';
 import {
   createPrismaCommerceStore,
+  PaymentService,
   type CommerceStore,
   type CreateOrderData,
+  type PaymentProviderAdapter,
 } from '@ruangnode/services';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -151,6 +153,51 @@ describe('Prisma commerce adapter over PostgreSQL', () => {
       })();
 
       expect(await prisma.product.findUnique({ where: { slug: productId } })).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'commits payment and order state atomically and deduplicates a webhook',
+    async () => {
+      const user = await prisma.user.create({ data: { email: 'payment-adapter@example.com' } });
+      const order = await store.orders.create({
+        userId: user.id,
+        status: 'PENDING',
+        currency: 'USD',
+        subtotalMinor: 1250n,
+        discountMinor: 0n,
+        totalMinor: 1250n,
+        expiresAt: null,
+        items: [],
+      });
+      const adapter: PaymentProviderAdapter = {
+        provider: 'integration',
+        async createPayment() {
+          return { providerPaymentId: 'integration-payment-1', rawReference: null };
+        },
+        async verifyWebhook() {
+          return {
+            externalEventId: 'integration-event-1',
+            eventType: 'payment.paid',
+            providerPaymentId: 'integration-payment-1',
+            status: 'PAID' as const,
+            amountMinor: 1250n,
+            currency: 'USD',
+            rawReference: null,
+          };
+        },
+      };
+      const payments = new PaymentService({ store, providers: new Map([['integration', adapter]]) });
+      const payment = await payments.createPayment(user.id, order.id, 'integration');
+
+      await payments.processWebhook('integration', {}, 'verified');
+      await payments.processWebhook('integration', {}, 'verified');
+
+      expect((await store.orders.findById(order.id))?.status).toBe('PAID');
+      expect((await prisma.payment.findUnique({ where: { id: payment.id } }))?.status).toBe('PAID');
+      expect(await prisma.webhookEvent.count({ where: { provider: 'integration' } })).toBe(1);
+      expect(await prisma.auditLog.count({ where: { resourceType: 'Payment', resourceId: payment.id } })).toBeGreaterThan(0);
     },
     TEST_TIMEOUT_MS,
   );

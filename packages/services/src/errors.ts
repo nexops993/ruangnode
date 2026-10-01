@@ -40,6 +40,11 @@ export const COMMERCE_MESSAGES = {
   orderNotCancellable: 'This order can no longer be cancelled.',
   orderStateChanged: 'The order was changed by another operation. Reload it and try again.',
   paymentsUnavailable: 'Payment processing is not available yet.',
+  paymentNotFound: 'The requested payment was not found.',
+  paymentProviderUnavailable: 'The selected payment provider is not available.',
+  paymentAmountMismatch: 'The payment amount does not match the order total.',
+  paymentCurrencyMismatch: 'The payment currency does not match the order currency.',
+  webhookInvalid: 'The payment webhook could not be verified.',
 
   /** Currency of every monetary column of one order must agree. */
   mixedCurrency: 'All items of an order must use the same currency.',
@@ -147,4 +152,24 @@ export function paymentsUnavailableError(): AppError {
     message: COMMERCE_MESSAGES.paymentsUnavailable,
     retryable: false,
   });
+}
+
+export function paymentNotFoundError(): AppError {
+  return new AppError({ code: 'NOT_FOUND', message: COMMERCE_MESSAGES.paymentNotFound });
+}
+
+export function paymentProviderUnavailableError(): AppError {
+  return new AppError({ code: 'SERVICE_UNAVAILABLE', message: COMMERCE_MESSAGES.paymentProviderUnavailable });
+}
+
+export function paymentAmountMismatchError(): AppError {
+  return new AppError({ code: 'CONFLICT', message: COMMERCE_MESSAGES.paymentAmountMismatch });
+}
+
+export function paymentCurrencyMismatchError(): AppError {
+  return new AppError({ code: 'CONFLICT', message: COMMERCE_MESSAGES.paymentCurrencyMismatch });
+}
+
+export function invalidPaymentWebhookError(): AppError {
+  return new AppError({ code: 'VALIDATION_FAILED', message: COMMERCE_MESSAGES.webhookInvalid });
 }

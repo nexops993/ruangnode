@@ -1,9 +1,13 @@
 import type { OrderRecord, OrderStatus } from '../orders/types.js';
-import type { CommerceStore, CreateOrderData, OrderRepository } from '../ports.js';
+import type { CommerceStore, CreateOrderData, OrderRepository, PaymentRepository, WebhookRepository, AuditRepository } from '../ports.js';
+import type { PaymentStatus } from '@ruangnode/database';
+import type { AuditEvent } from '../payments/types.js';
 import type { ProductRecord, ProductVariantRecord } from '../catalog/types.js';
 import type { ResourceProfileRecord } from '../resources/types.js';
 import {
   cloneOrderRecord,
+  clonePaymentRecord,
+  cloneWebhookRecord,
   cloneRecord,
   cloneState,
   emptyState,
@@ -109,11 +113,68 @@ export function createInMemoryCommerceStore(): InMemoryCommerceStore {
     },
   };
 
+  const payments: PaymentRepository = {
+    async findById(paymentId) {
+      const row = state.payments.get(paymentId);
+      return row === undefined ? null : clonePaymentRecord(row);
+    },
+    async findByProviderPaymentId(provider, providerPaymentId) {
+      for (const row of state.payments.values()) {
+        if (row.provider === provider && row.providerPaymentId === providerPaymentId) return clonePaymentRecord(row);
+      }
+      return null;
+    },
+    async create(data) {
+      const now = new Date();
+      const record = { id: crypto.randomUUID(), ...data, paidAt: null, createdAt: now, updatedAt: now };
+      state.payments.set(record.id, record);
+      return clonePaymentRecord(record);
+    },
+    async updateStatus(paymentId, from: PaymentStatus, to: PaymentStatus, paidAt, rawReference) {
+      const row = state.payments.get(paymentId);
+      if (row === undefined || row.status !== from) return false;
+      state.payments.set(paymentId, { ...row, status: to, paidAt, rawReference, updatedAt: new Date() });
+      return true;
+    },
+  };
+
+  const webhooks: WebhookRepository = {
+    async find(provider, externalEventId) {
+      for (const row of state.webhooks.values()) {
+        if (row.provider === provider && row.externalEventId === externalEventId) return cloneWebhookRecord(row);
+      }
+      return null;
+    },
+    async create(data) {
+      const now = new Date();
+      const record = { id: crypto.randomUUID(), ...data, processedAt: null, processingError: null, createdAt: now };
+      state.webhooks.set(record.id, record);
+      return cloneWebhookRecord(record);
+    },
+    async markProcessed(id, processedAt) {
+      const row = state.webhooks.get(id);
+      if (row !== undefined) state.webhooks.set(id, { ...row, processedAt, processingError: null });
+    },
+    async markFailed(id, processingError) {
+      const row = state.webhooks.get(id);
+      if (row !== undefined) state.webhooks.set(id, { ...row, processingError });
+    },
+  };
+
+  const audit: AuditRepository = {
+    async record(event: AuditEvent) {
+      state.audits.push({ ...event, ...(event.metadata === undefined ? {} : { metadata: { ...event.metadata } }) });
+    },
+  };
+
   const store: InMemoryCommerceStore = {
     products: buildProducts(state),
     variants: buildVariants(state),
     resourceProfiles: buildProfiles(state),
     orders,
+    payments,
+    webhooks,
+    audit,
 
     async transaction<T>(work: (transactionStore: CommerceStore) => Promise<T>): Promise<T> {
       const snapshot = cloneState(state);

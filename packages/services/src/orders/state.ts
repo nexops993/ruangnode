@@ -89,7 +89,7 @@ export function canCustomerCancel(status: OrderStatus): boolean {
  * Kept in one function so the gate is trivial to lift later.
  */
 export function assertPaymentPhaseAllows(to: OrderStatus): void {
-  if (isPaymentDrivenTransition(to)) {
+  if (isPaymentDrivenTransition(to) && to !== 'PAID') {
     throw paymentsUnavailableError();
   }
 }

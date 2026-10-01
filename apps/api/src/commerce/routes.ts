@@ -44,6 +44,9 @@ import {
   adminUpdateVariantRouteSchema,
   adminVariantStatusRouteSchema,
   cancelOrderRouteSchema,
+  createPaymentRouteSchema,
+  getPaymentRouteSchema,
+  paymentWebhookRouteSchema,
   getOrderRouteSchema,
   listOrdersRouteSchema,
   listProductsRouteSchema,
@@ -113,9 +116,39 @@ export function registerCommerceRoutes(
       registerAdminProfileRoutes(scope, services, authenticate, authorizeAdmin, '');
 
       registerOrderRoutes(scope, services, authenticate, authorizeOrderOwner);
+      registerPaymentRoutes(scope, services, authenticate);
     },
     { prefix: '/api/v1' },
   );
+}
+
+function registerPaymentRoutes(
+  app: FastifyInstance,
+  services: CommerceServices,
+  authenticate: preHandlerHookHandler,
+): void {
+  const authorizePaymentOwner = requireOwnership(async (request) =>
+    services.payments.findOwnerUserId(idParam(request)),
+  );
+
+  app.post('/payments/create', { schema: createPaymentRouteSchema, preHandler: authenticate }, async (request, reply) => {
+    const { user } = authContextOf(request);
+    const body = request.body as { orderId: string; provider: string };
+    const payment = await services.payments.createPayment(user.id, body.orderId, body.provider);
+    return reply.status(201).send(data({ payment }));
+  });
+
+  app.get('/payments/:id', { schema: getPaymentRouteSchema, preHandler: [authenticate, authorizePaymentOwner] }, async (request) => {
+    const { user } = authContextOf(request);
+    return data({ payment: await services.payments.getPaymentForUser(user.id, idParam(request)) });
+  });
+
+  app.post('/webhooks/payments/:provider', { schema: paymentWebhookRouteSchema }, async (request) => {
+    const { provider } = request.params as { provider: string };
+    const signature = request.headers['x-payment-signature'] as string | undefined;
+    const result = await services.payments.processWebhook(provider, request.body, signature);
+    return data({ duplicate: result.duplicate });
+  });
 }
 
 /** Public catalog: no authentication, publicly available entries only. */

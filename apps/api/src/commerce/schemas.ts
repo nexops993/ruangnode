@@ -24,6 +24,7 @@ import {
   DiskPolicy,
   MemorySwapPolicy,
   OrderStatus,
+  PaymentStatus,
   ProductStatus,
   ProductType,
 } from '@ruangnode/database';
@@ -446,6 +447,35 @@ const orderSchema = {
   properties: orderProperties,
 } as const;
 
+const paymentSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['id', 'orderId', 'provider', 'providerPaymentId', 'status', 'amount', 'paidAt', 'createdAt', 'updatedAt'],
+  properties: {
+    id: { type: 'string' },
+    orderId: { type: 'string' },
+    provider: { type: 'string' },
+    providerPaymentId: { type: 'string' },
+    status: { type: 'string', enum: [...Object.values(PaymentStatus)] },
+    amount: moneySchema,
+    paidAt: { type: ['string', 'null'] },
+    createdAt: { type: 'string' },
+    updatedAt: { type: 'string' },
+  },
+} as const;
+
+const createPaymentBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['orderId', 'provider'],
+  properties: {
+    orderId: { type: 'string', format: 'uuid' },
+    provider: { type: 'string', minLength: 1, maxLength: 64 },
+  },
+} as const;
+
+const paymentWebhookBodySchema = { type: 'object', additionalProperties: true } as const;
+
 /** `GET /api/v1/products` — public catalog. */
 export const listProductsRouteSchema = {
   querystring: listProductsQuerySchema,
@@ -700,6 +730,23 @@ export const cancelOrderRouteSchema = {
     409: errorResponseSchema,
     422: errorResponseSchema,
   },
+} satisfies FastifySchema;
+
+export const createPaymentRouteSchema = {
+  body: createPaymentBodySchema,
+  response: { 201: dataResponse({ payment: paymentSchema }), 401: errorResponseSchema, 404: errorResponseSchema, 409: errorResponseSchema, 503: errorResponseSchema, 422: errorResponseSchema },
+} satisfies FastifySchema;
+
+export const getPaymentRouteSchema = {
+  params: idParamSchema,
+  response: { 200: dataResponse({ payment: paymentSchema }), 401: errorResponseSchema, 404: errorResponseSchema, 422: errorResponseSchema },
+} satisfies FastifySchema;
+
+export const paymentWebhookRouteSchema = {
+  params: { type: 'object', additionalProperties: false, required: ['provider'], properties: { provider: { type: 'string', minLength: 1, maxLength: 64 } } },
+  headers: { type: 'object', properties: { 'x-payment-signature': { type: 'string' } } },
+  body: paymentWebhookBodySchema,
+  response: { 200: dataResponse({ duplicate: { type: 'boolean' } }), 400: errorResponseSchema, 404: errorResponseSchema, 503: errorResponseSchema, 422: errorResponseSchema },
 } satisfies FastifySchema;
 
 

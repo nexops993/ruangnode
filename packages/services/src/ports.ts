@@ -12,7 +12,7 @@
  * written together: the callback receives a store bound to one database
  * transaction, so a failure cannot leave a half-written order behind.
  */
-import type { BillingPeriod, ProductStatus, ProductType } from '@ruangnode/database';
+import type { BillingPeriod, PaymentStatus, ProductStatus, ProductType } from '@ruangnode/database';
 
 import type { ProductRecord, ProductVariantRecord } from './catalog/types.js';
 import type {
@@ -21,6 +21,7 @@ import type {
   OrderStatus,
 } from './orders/types.js';
 import type { ResourceProfileRecord } from './resources/types.js';
+import type { AuditEvent, PaymentRecord, WebhookEventRecord } from './payments/types.js';
 
 export interface Pagination {
   limit: number;
@@ -154,11 +155,48 @@ export interface OrderRepository {
   updateStatus(orderId: string, from: OrderStatus, to: OrderStatus): Promise<boolean>;
 }
 
+export interface PaymentCreateData {
+  orderId: string;
+  provider: string;
+  providerPaymentId: string;
+  status: PaymentStatus;
+  amountMinor: bigint;
+  currency: string;
+  rawReference: string | null;
+}
+
+export interface PaymentRepository {
+  findById(paymentId: string): Promise<PaymentRecord | null>;
+  findByProviderPaymentId(provider: string, providerPaymentId: string): Promise<PaymentRecord | null>;
+  create(data: PaymentCreateData): Promise<PaymentRecord>;
+  updateStatus(
+    paymentId: string,
+    from: PaymentStatus,
+    to: PaymentStatus,
+    paidAt: Date | null,
+    rawReference: string | null,
+  ): Promise<boolean>;
+}
+
+export interface WebhookRepository {
+  find(provider: string, externalEventId: string): Promise<WebhookEventRecord | null>;
+  create(data: Omit<WebhookEventRecord, 'id' | 'createdAt' | 'processedAt' | 'processingError'>): Promise<WebhookEventRecord>;
+  markProcessed(id: string, processedAt: Date): Promise<void>;
+  markFailed(id: string, processingError: string): Promise<void>;
+}
+
+export interface AuditRepository {
+  record(event: AuditEvent): Promise<void>;
+}
+
 export interface CommerceStore {
   products: ProductRepository;
   variants: ProductVariantRepository;
   resourceProfiles: ResourceProfileRepository;
   orders: OrderRepository;
+  payments: PaymentRepository;
+  webhooks: WebhookRepository;
+  audit: AuditRepository;
   /**
    * Runs `work` inside one database transaction, with a store bound to it.
    * Any thrown error rolls the whole unit of work back.

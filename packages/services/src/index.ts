@@ -62,6 +62,10 @@ export * from './orders/serialization.js';
 export * from './orders/state.js';
 export * from './orders/types.js';
 export * from './orders/validation.js';
+export * from './payments/payment-service.js';
+export * from './payments/serialization.js';
+export * from './payments/state.js';
+export * from './payments/types.js';
 
 export * from './resources/resource-profile-service.js';
 export * from './resources/serialization.js';

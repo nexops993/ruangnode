@@ -84,6 +84,7 @@ enum OrderStatus {
 /// Provider payment state. Deliberately separate from OrderStatus.
 enum PaymentStatus {
   PENDING
+  PROCESSING
   PAID
   FAILED
   CANCELLED

@@ -59,6 +59,11 @@ describe('order state machine', () => {
     for (const target of PAYMENT_DRIVEN_ORDER_TARGETS) {
       expect(isPaymentDrivenTransition(target)).toBe(true);
 
+      if (target === 'PAID') {
+        expect(() => assertPaymentPhaseAllows(target)).not.toThrow();
+        continue;
+      }
+
       try {
         assertPaymentPhaseAllows(target);
         throw new Error(`Expected ${target} to be gated by the payment phase.`);

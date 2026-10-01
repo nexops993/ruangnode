@@ -51,6 +51,7 @@ export {
   DiskPolicy,
   MemorySwapPolicy,
   OrderStatus,
+  PaymentStatus,
   ProductStatus,
   ProductType,
 } from './generated/prisma/enums.js';
