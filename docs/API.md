@@ -117,7 +117,9 @@ PATCH /admin/resource-profiles/:id
 DELETE /admin/resource-profiles/:id
 ```
 
-Only admins can modify resource profiles.
+`DELETE` deactivates the profile; it never physically deletes a profile that may
+be referenced by historical variants or instances. Only admins can modify
+resource profiles.
 
 ## Orders
 

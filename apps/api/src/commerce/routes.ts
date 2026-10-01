@@ -30,6 +30,7 @@ import {
   adminCreateProductRouteSchema,
   adminCreateProfileRouteSchema,
   adminCreateVariantRouteSchema,
+  adminArchiveProfileRouteSchema,
   adminGetProductRouteSchema,
   adminGetProfileRouteSchema,
   adminGetVariantRouteSchema,
@@ -315,6 +316,13 @@ function registerAdminProfileRoutes(
     { schema: adminUpdateProfileRouteSchema, preHandler: guard },
     async (request) =>
       data({ profile: await services.resourceProfiles.update(idParam(request), request.body) }),
+  );
+
+  app.delete(
+    `${base}/resource-profiles/:id`,
+    { schema: adminArchiveProfileRouteSchema, preHandler: guard },
+    async (request) =>
+      data({ profile: await services.resourceProfiles.setActive(idParam(request), false) }),
   );
 
   app.post(

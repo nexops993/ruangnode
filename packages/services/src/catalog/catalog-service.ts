@@ -51,11 +51,12 @@ export class CatalogService {
       statuses: ['ACTIVE'],
       ...(filter.type === undefined ? {} : { type: filter.type }),
       ...(filter.serviceType === undefined ? {} : { serviceType: filter.serviceType }),
-      limit: clampLimit(filter.limit),
-      offset: Math.max(filter.offset ?? 0, 0),
     });
+    const sellableProducts = await this.buildPublicProducts(products);
+    const offset = Math.max(filter.offset ?? 0, 0);
+    const limit = clampLimit(filter.limit);
 
-    return this.buildPublicProducts(products);
+    return sellableProducts.slice(offset, offset + limit);
   }
 
   /**
@@ -133,9 +134,9 @@ export class CatalogService {
       variantsByProduct.set(variant.productId, list);
     }
 
-    return products.map((product) =>
-      toPublicProduct(product, variantsByProduct.get(product.id) ?? []),
-    );
+    return products
+      .map((product) => toPublicProduct(product, variantsByProduct.get(product.id) ?? []))
+      .filter((product) => product.variants.length > 0);
   }
 }
 

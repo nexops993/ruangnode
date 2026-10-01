@@ -133,7 +133,7 @@ export class ResourceProfileService {
       description: patch.description === undefined ? current.description : patch.description,
     });
 
-    if (resourceValuesChanged(current, patch)) {
+    if (patch.active === false || resourceValuesChanged(current, patch)) {
       await this.assertNotUsedByActiveVariant(id);
     }
 

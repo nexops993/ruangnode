@@ -226,6 +226,84 @@ describe('commerce API', () => {
 
     await server.close();
   });
+
+  it('guards profile deactivation through PATCH and DELETE', async () => {
+    const server = createCommerceTestServer();
+    const admin = await adminCookie(server);
+    const seeded = await seedPurchasable(server);
+
+    const patch = await server.app.inject({
+      method: 'PATCH',
+      url: `/api/v1/admin/resource-profiles/${seeded.profileId}`,
+      headers: { cookie: admin },
+      payload: { active: false },
+    });
+    expect(patch.statusCode).toBe(409);
+
+    const deletion = await server.app.inject({
+      method: 'DELETE',
+      url: `/api/v1/admin/resource-profiles/${seeded.profileId}`,
+      headers: { cookie: admin },
+    });
+    expect(deletion.statusCode).toBe(409);
+
+    await server.commerceServices.variants.changeStatus(seeded.variantId, { status: 'DRAFT' });
+
+    const deactivated = await server.app.inject({
+      method: 'DELETE',
+      url: `/api/v1/admin/resource-profiles/${seeded.profileId}`,
+      headers: { cookie: admin },
+    });
+    expect(deactivated.statusCode).toBe(200);
+    expect(deactivated.json<{ data: { profile: { active: boolean } } }>().data.profile.active).toBe(
+      false,
+    );
+
+    const customer = await registerUser(server, `profile-delete-${uuid()}@example.com`);
+    const forbidden = await server.app.inject({
+      method: 'DELETE',
+      url: `/api/v1/admin/resource-profiles/${seeded.profileId}`,
+      headers: { cookie: customer.cookie },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    await server.close();
+  });
+
+  it('hides active products that no longer have sellable variants', async () => {
+    const server = createCommerceTestServer();
+    const product = await server.commerceServices.products.create({
+      slug: `empty-${uuid().slice(0, 8)}`,
+      name: 'Empty catalog product',
+      type: 'DIGITAL',
+    });
+    const variant = await server.commerceServices.variants.create(product.id, {
+      name: 'Download',
+      sku: `EMPTY-${uuid().slice(0, 8).toUpperCase()}`,
+      priceMinor: '1000',
+      currency: 'IDR',
+      billingPeriod: 'ONE_TIME',
+    });
+    await server.commerceServices.variants.changeStatus(variant.id, { status: 'ACTIVE' });
+    await server.commerceServices.products.changeStatus(product.id, { status: 'ACTIVE' });
+    await server.commerceServices.variants.changeStatus(variant.id, { status: 'DRAFT' });
+
+    const listed = await server.app.inject({ method: 'GET', url: '/api/v1/products' });
+    expect(listed.statusCode).toBe(200);
+    expect(
+      listed.json<{ data: { products: Array<{ id: string }> } }>().data.products.some(
+        (entry) => entry.id === product.id,
+      ),
+    ).toBe(false);
+
+    const detail = await server.app.inject({
+      method: 'GET',
+      url: `/api/v1/products/${product.slug}`,
+    });
+    expect(detail.statusCode).toBe(404);
+
+    await server.close();
+  });
 });
 
 interface OrderPayload {

@@ -639,6 +639,15 @@ export const adminUpdateProfileRouteSchema = {
   },
 } satisfies FastifySchema;
 
+/** `DELETE /api/v1/admin/resource-profiles/:id` — deactivates, never deletes. */
+export const adminArchiveProfileRouteSchema = {
+  params: idParamSchema,
+  response: {
+    200: dataResponse({ profile: adminResourceProfileSchema }),
+    ...adminWriteResponses,
+  },
+} satisfies FastifySchema;
+
 /** `POST /api/v1/admin/resource-profiles/:id/status` — activate/deactivate. */
 export const adminProfileStatusRouteSchema = {
   params: idParamSchema,
