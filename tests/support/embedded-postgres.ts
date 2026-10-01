@@ -1,13 +1,13 @@
 /**
  * Embedded PostgreSQL for the cross-package integration tests.
  *
- * The control plane is verified against a real PostgreSQL engine — the real
- * Prisma client, the real migration SQL and real constraints — without requiring
+ * The control plane is verified against a real PostgreSQL engine - the real
+ * Prisma client, the real migration SQL and real constraints - without requiring
  * a database service: PGlite is PostgreSQL compiled to WebAssembly, and the
  * socket server exposes it over the PostgreSQL wire protocol.
  *
  * The migrations are applied exactly as they are committed (every
- * `packages/database/prisma/migrations/*​/migration.sql`, in directory order), so
+ * `packages/database/prisma/migrations/<name>/migration.sql`, in directory order), so
  * a migration that cannot run fails the suite.
  */
 import { readdirSync, readFileSync } from 'node:fs';

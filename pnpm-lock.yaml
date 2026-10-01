@@ -271,6 +271,9 @@ importers:
       '@ruangnode/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@ruangnode/services':
+        specifier: workspace:*
+        version: link:../../packages/services
       '@ruangnode/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -373,6 +376,13 @@ importers:
         version: 5.0.2(@types/node@22.20.4)(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
   packages/services:
+    dependencies:
+      '@ruangnode/database':
+        specifier: workspace:*
+        version: link:../database
+      '@ruangnode/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -380,6 +390,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.2(@types/node@22.20.4)(vite@8.3.1(@types/node@22.20.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
   packages/shared:
     devDependencies:
@@ -407,6 +420,9 @@ importers:
       '@ruangnode/database':
         specifier: workspace:*
         version: link:../packages/database
+      '@ruangnode/services':
+        specifier: workspace:*
+        version: link:../packages/services
       '@ruangnode/shared':
         specifier: workspace:*
         version: link:../packages/shared

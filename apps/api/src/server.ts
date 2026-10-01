@@ -17,6 +17,7 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastif
 
 import { authConfigFromEnv, type AuthConfig } from './auth/config.js';
 import { AUTH_ROUTE_PREFIX, registerAuthRoutes } from './auth/routes.js';
+import { registerCommerceRoutes, type CommerceRoutesOptions } from './commerce/routes.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { isValidationError, validationError } from './validation.js';
 
@@ -59,6 +60,21 @@ export interface BuildServerOptions {
    * it, so a deployed process can never run without authentication.
    */
   auth?: AuthModuleOptions;
+  /**
+   * Commerce wiring (catalog, resource profiles and orders).
+   *
+   * The composed domain services are injected; the API layer never receives a
+   * database client. Commerce routes also need the authentication service for
+   * their guards, so they are registered only together with `auth`.
+   */
+  commerce?: CommerceModuleOptions;
+}
+
+/**
+ * Options of the commerce module: the composed domain services.
+ */
+export interface CommerceModuleOptions {
+  services: CommerceRoutesOptions['services'];
 }
 
 /**
@@ -124,12 +140,20 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
         'Authentication was configured but the configuration is invalid; auth routes are not registered.',
       );
     } else {
-      registerAuthentication(app, options.auth, authConfig);
+      const authService = registerAuthentication(app, options.auth, authConfig);
+
+      registerCommerce(app, authService, authConfig.cookie, options.commerce);
     }
   } else {
     app.log.warn(
       'Authentication routes are not registered: no authentication module was provided.',
     );
+
+    if (options.commerce !== undefined) {
+      // Commerce routes are guarded by the authentication guards, so they must
+      // not be reachable on a process that cannot authenticate anybody.
+      app.log.warn('Commerce routes are not registered: authentication is unavailable.');
+    }
   }
 
   return app;
@@ -155,7 +179,7 @@ function registerAuthentication(
   app: FastifyInstance,
   auth: AuthModuleOptions,
   config: AuthConfig,
-): void {
+): AuthService {
   const service = new AuthService({
     store: auth.store,
     hasher: auth.hasher ?? createArgon2idPasswordHasher(),
@@ -177,4 +201,27 @@ function registerAuthentication(
     limiter: auth.limiter ?? createInMemoryRateLimiter(),
     rateLimits: config.rateLimits,
   });
+
+  return service;
+}
+
+/**
+ * Registers the commerce routes (catalog, resource profiles, orders).
+ *
+ * The guards need the same `AuthService` instance the authentication routes use,
+ * so both modules share one service and one session configuration.
+ */
+function registerCommerce(
+  app: FastifyInstance,
+  auth: AuthService,
+  cookie: AuthConfig['cookie'],
+  commerce: CommerceModuleOptions | undefined,
+): void {
+  if (commerce === undefined) {
+    app.log.warn('Commerce routes are not registered: no commerce module was provided.');
+
+    return;
+  }
+
+  registerCommerceRoutes(app, { services: commerce.services, auth, cookie });
 }

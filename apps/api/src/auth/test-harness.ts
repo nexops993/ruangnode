@@ -22,6 +22,14 @@ import {
   type InMemoryAuthStore,
   type TestClock,
 } from '@ruangnode/auth/testing';
+import {
+  createCommerceServices,
+  type CommerceServices,
+} from '@ruangnode/services/testing';
+import {
+  createInMemoryCommerceStore,
+  type InMemoryCommerceStore,
+} from '@ruangnode/services/testing';
 import type { FastifyServerOptions } from 'fastify';
 
 import { buildServer } from '../server.js';
@@ -48,6 +56,8 @@ export interface TestServer {
   notifier: CapturingPasswordResetNotifier;
   limiter: RateLimiter;
   config: AuthConfig;
+  commerce: InMemoryCommerceStore;
+  commerceServices: CommerceServices;
   /**
    * An `AuthService` over the same store, for tests that compose guards on
    * test-only routes. It resolves the same sessions as the routes registered by
@@ -62,6 +72,8 @@ export function createTestServer(options: TestServerOptions = {}): TestServer {
   const clock = createTestClock(options.start ?? TEST_START);
   const notifier = createCapturingPasswordResetNotifier();
   const limiter = createInMemoryRateLimiter();
+  const commerce = createInMemoryCommerceStore();
+  const commerceServices = createCommerceServices({ store: commerce });
 
   const config: AuthConfig = {
     cookie: {
@@ -90,6 +102,7 @@ export function createTestServer(options: TestServerOptions = {}): TestServer {
       config,
       hasher: createArgon2idPasswordHasher(TEST_ARGON2ID_PARAMS),
     },
+    commerce: { services: commerceServices },
   });
 
   const guardService = new AuthService({
@@ -107,6 +120,8 @@ export function createTestServer(options: TestServerOptions = {}): TestServer {
     notifier,
     limiter,
     config,
+    commerce,
+    commerceServices,
     guardService,
     close: () => app.close(),
   };

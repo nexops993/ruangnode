@@ -8,6 +8,7 @@ import {
   databaseUrlFromEnv,
   loadEnvironmentFiles,
 } from '@ruangnode/database';
+import { createCommerceServices, createPrismaCommerceStore } from '@ruangnode/services';
 
 import { authConfigFromEnv } from './auth/config.js';
 import { buildServer } from './server.js';
@@ -66,6 +67,11 @@ function bootstrap(): Bootstrap {
       // created and stored, but no message is sent. See docs/DECISIONS.md.
       notifier: new NullPasswordResetNotifier(),
       config,
+    },
+    // Catalog, resource profiles and orders. The store is the only database
+    // dependency the services see (`.clinerules` → dependency injection).
+    commerce: {
+      services: createCommerceServices({ store: createPrismaCommerceStore(prisma) }),
     },
   });
 

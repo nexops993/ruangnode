@@ -6,6 +6,7 @@ import { defineConfig } from 'vitest/config';
  * Aggregates the projects that currently own tests:
  *   - packages/shared   -> unit tests for platform primitives
  *   - packages/database -> schema invariants and configuration helpers
+ *   - packages/services -> commerce domain rules (pricing, state machine, input)
  *   - apps/api          -> control plane API tests (in-process, via `inject`)
  *   - tests             -> cross-package integration tests
  *
@@ -17,6 +18,7 @@ export default defineConfig({
     projects: [
       'packages/shared/vitest.config.ts',
       'packages/database/vitest.config.ts',
+      'packages/services/vitest.config.ts',
       'apps/api/vitest.config.ts',
       'tests/vitest.config.ts',
     ],

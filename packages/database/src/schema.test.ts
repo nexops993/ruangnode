@@ -49,6 +49,17 @@ function enumValues(name: string): string[] {
   return lines(block('enum', name));
 }
 
+/**
+ * Asserts that a field is a *required* `DateTime` column.
+ *
+ * `fields()` normalises each declaration, so a bare `DateTime` arrives without
+ * trailing whitespace. The invariant is unchanged: the column must be a
+ * non-nullable `DateTime` — an optional column would be declared `DateTime?`.
+ */
+function expectRequiredDateTime(declaration: string | undefined): void {
+  expect(declaration?.split(/\s+/)[0]).toBe('DateTime');
+}
+
 /** Every entity of docs/DATABASE.md. `Role` is intentionally not a table. */
 const ENTITIES = [
   'User',
@@ -351,8 +362,8 @@ describe('authentication tables', () => {
   it('makes sessions revocable and expiring', () => {
     const session = fields('Session');
 
-    expect(session.get('expiresAt')).toMatch(/^DateTime\s/);
-    expect(session.get('lastUsedAt')).toMatch(/^DateTime\s/);
+    expectRequiredDateTime(session.get('expiresAt'));
+    expectRequiredDateTime(session.get('lastUsedAt'));
     expect(session.get('revokedAt')).toMatch(/^DateTime\?/);
     expect(session.get('revokedReason')).toContain('SessionRevocationReason');
     expect(block('model', 'Session')).toContain('@@index([userId, expiresAt])');
@@ -362,7 +373,7 @@ describe('authentication tables', () => {
   it('makes password reset tokens single-use and expiring', () => {
     const reset = fields('PasswordResetToken');
 
-    expect(reset.get('expiresAt')).toMatch(/^DateTime\s/);
+    expectRequiredDateTime(reset.get('expiresAt'));
     expect(reset.get('usedAt')).toMatch(/^DateTime\?/);
     expect(block('model', 'PasswordResetToken')).toContain('@@index([userId, expiresAt])');
   });

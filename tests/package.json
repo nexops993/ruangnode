@@ -12,6 +12,7 @@
     "@ruangnode/api": "workspace:*",
     "@ruangnode/auth": "workspace:*",
     "@ruangnode/database": "workspace:*",
+    "@ruangnode/services": "workspace:*",
     "@ruangnode/shared": "workspace:*"
   },
   "devDependencies": {

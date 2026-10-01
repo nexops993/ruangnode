@@ -34,4 +34,23 @@ export * from './config.js';
  * module graph. Runtime values (`createDatabaseClient`, and the generated enums
  * when they are needed) are imported explicitly.
  */
-export type { Prisma, PrismaClient } from './generated/prisma/client.js';
+export { Prisma } from './generated/prisma/client.js';
+export type { PrismaClient } from './generated/prisma/client.js';
+
+/**
+ * Schema enums, re-exported as runtime values.
+ *
+ * The database layer owns the enumerations of the schema (docs/DATABASE.md),
+ * so domain code must not re-declare them: a duplicated literal union silently
+ * drifts from the schema the day a value is added. `ProductStatus`, for example,
+ * is both the const object (`ProductStatus.ACTIVE`) and the string union type
+ * (`'DRAFT' | 'ACTIVE' | 'ARCHIVED'`) derived from the generated client.
+ */
+export {
+  BillingPeriod,
+  DiskPolicy,
+  MemorySwapPolicy,
+  OrderStatus,
+  ProductStatus,
+  ProductType,
+} from './generated/prisma/enums.js';
