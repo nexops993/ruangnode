@@ -8,7 +8,10 @@ ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable && corepack prepare pnpm@12.8.1 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps ./apps
+COPY packages ./packages
 COPY node-agent/package.json ./node-agent/package.json
+COPY tests/package.json ./tests/package.json
 
 RUN corepack pnpm install --frozen-lockfile
 
