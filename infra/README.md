@@ -21,17 +21,22 @@ infra/
 
 ## Current status
 
-Phase 0 established the workspace. Phase 1 added the database foundation in
-`packages/database` (schema, migrations, development seed). This directory
-still contains no deployable artifacts; the following are added in later phases:
-
-- `infra/docker/Dockerfile.web`, `Dockerfile.api`, `Dockerfile.node-agent`
-- `infra/docker/docker-compose.dev.yml` (PostgreSQL, Redis when needed)
-- `infra/scripts/` health-check and backup entrypoints
+Deployable Dockerfiles and a local Compose stack are present. Compose runs
+PostgreSQL, the control-plane API, the web app, and a Node Agent. The agent is
+the only service mounting the host Docker socket.
 
 Database migrations and seeding are run from the owning package, not from here:
 
 ```bash
 pnpm --filter @ruangnode/database migrate:deploy
 pnpm --filter @ruangnode/database db:seed
+```
+
+The Compose API and Node Agent require `NODE_AGENT_TOKEN` in the root `.env`.
+The value is passed to the API as `NODE_AGENT_TOKEN` and to the agent as its
+shared secret. Docker integration tests remain separate from unit tests:
+
+```bash
+corepack pnpm --filter @ruangnode/node-agent test
+RUN_DOCKER_INTEGRATION=1 corepack pnpm --filter @ruangnode/node-agent test:integration
 ```

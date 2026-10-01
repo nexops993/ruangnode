@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { infrastructureError, INFRASTRUCTURE_MESSAGES } from './errors.js';
 import type { NodeRepository } from './ports.js';
 import type { NodeHeartbeatInput, NodeRecord } from './types.js';
@@ -47,4 +47,10 @@ export class NodeRegistryService {
 
 export function hashNodeToken(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+export function nodeTokenMatches(expectedHash: string, actualHash: string): boolean {
+  const expected = Buffer.from(expectedHash, 'hex');
+  const actual = Buffer.from(actualHash, 'hex');
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }

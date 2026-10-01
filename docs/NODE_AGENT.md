@@ -119,6 +119,11 @@ For every instance creation:
 14. Verify health.
 15. Report runtime ID.
 
+The HTTP transport exposes `GET /health` without authentication. All runtime
+routes require `Authorization: Bearer <shared-secret>`. Docker integration
+tests are opt-in and are not part of the unit test command; run them only on a
+host with a reachable Docker Engine.
+
 ## Resource enforcement
 
 The agent must apply actual runtime limits.

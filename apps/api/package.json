@@ -24,6 +24,7 @@
     "@fastify/cookie": "catalog:",
     "@ruangnode/auth": "workspace:*",
     "@ruangnode/database": "workspace:*",
+    "@ruangnode/node-agent": "workspace:*",
     "@ruangnode/services": "workspace:*",
     "@ruangnode/shared": "workspace:*",
     "fastify": "catalog:"

@@ -73,6 +73,7 @@ export interface DockerContainerConfig {
 }
 
 export interface DockerRuntime {
+  findContainer(instanceId: string): Promise<string | null>;
   createContainer(config: DockerContainerConfig): Promise<string>;
   startContainer(runtimeId: string): Promise<void>;
   stopContainer(runtimeId: string): Promise<void>;

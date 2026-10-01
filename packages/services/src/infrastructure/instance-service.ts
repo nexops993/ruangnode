@@ -21,7 +21,12 @@ export class InstanceService {
     const instance = await this.getForUser(userId, id);
     if (!canTransition(instance.status, 'DELETING')) throw infrastructureError('CONFLICT', INFRASTRUCTURE_MESSAGES.invalidTransition);
     if (!(await this.instances.transition(id, [instance.status], 'DELETING'))) throw infrastructureError('CONFLICT', INFRASTRUCTURE_MESSAGES.invalidTransition);
-    await this.agent.removeInstance(id);
+    try {
+      await this.agent.removeInstance(id);
+    } catch (error) {
+      await this.instances.updateRuntime(id, instance.runtimeId, 'ERROR');
+      throw error;
+    }
     const updated = await this.instances.updateRuntime(id, null, 'DELETED');
     if (updated === null) throw infrastructureError('NOT_FOUND', INFRASTRUCTURE_MESSAGES.instanceNotFound);
     return updated;

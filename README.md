@@ -139,6 +139,22 @@ Production nodes can be added later through the Node Agent architecture.
 - `docs/SECURITY.md` — security requirements
 - `docs/NODE_AGENT.md` — node agent architecture
 - `docs/RESOURCE_ISOLATION.md` — resource enforcement
+- `docs/DEPLOYMENT.md` — production deployment and env setup
+- `docs/ENVIRONMENT.md` — environment variables and examples
+- `docs/OPERATIONS.md` — service operations and health checks
+- `docs/TROUBLESHOOTING.md` — environment and deployment troubleshooting
+
+## Local validation
+
+```bash
+cd D:/ruangnode
+corepack enable pnpm
+corepack pnpm install
+corepack pnpm test
+corepack pnpm typecheck
+npx eslint .
+cd apps/web && npx next build
+```
 
 ## Important
 

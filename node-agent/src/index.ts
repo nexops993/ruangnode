@@ -17,4 +17,5 @@
  *   - no arbitrary host shell access is ever exposed to customers
  */
 export * from './docker.js';
+export * from './http.js';
 export * from './types.js';

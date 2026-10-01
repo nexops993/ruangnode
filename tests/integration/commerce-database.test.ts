@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { startEmbeddedPostgres, type EmbeddedPostgres } from '../support/embedded-postgres.js';
 
-const TEST_TIMEOUT_MS = 30_000;
+const TEST_TIMEOUT_MS = 120_000;
 
 let database: EmbeddedPostgres;
 let prisma: PrismaClient;

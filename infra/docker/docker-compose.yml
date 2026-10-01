@@ -1,0 +1,91 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: ruangnode-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ruangnode
+      POSTGRES_USER: ruangnode
+      POSTGRES_PASSWORD: ruangnode
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ruangnode -d ruangnode']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    container_name: ruangnode-api
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://ruangnode:ruangnode@postgres:5432/ruangnode?schema=public
+      API_HOST: 0.0.0.0
+      API_PORT: '3001'
+      WEB_APP_URL: http://localhost:3000
+      API_PUBLIC_URL: http://localhost:3001
+      NODE_AGENT_URL: http://node-agent:9443
+      NODE_AGENT_TOKEN: ${NODE_AGENT_TOKEN:?Set NODE_AGENT_TOKEN in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '3001:3001'
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:3001/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  node-agent:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.node-agent
+    container_name: ruangnode-node-agent
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      NODE_AGENT_HOST: 0.0.0.0
+      NODE_AGENT_PORT: '9443'
+      NODE_AGENT_SHARED_SECRET: ${NODE_AGENT_TOKEN:?Set NODE_AGENT_TOKEN in .env}
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - '9443:9443'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:9443/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.web
+    container_name: ruangnode-web
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_WEB_URL: http://localhost:3000
+    depends_on:
+      - api
+    ports:
+      - '3000:3000'
+
+volumes:
+  postgres-data:

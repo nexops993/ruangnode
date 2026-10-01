@@ -8,10 +8,11 @@ import {
   databaseUrlFromEnv,
   loadEnvironmentFiles,
 } from '@ruangnode/database';
-import { createCommerceServices, createPrismaCommerceStore } from '@ruangnode/services';
+import { createCommerceServices, createPrismaCommerceStore, createPrismaInfrastructureStore, InfrastructureReconciler, InstanceService, NodeRegistryService, NodeScheduler, ProvisioningService } from '@ruangnode/services';
+import { createHttpNodeAgent } from '@ruangnode/node-agent';
 
 import { authConfigFromEnv } from './auth/config.js';
-import { buildServer } from './server.js';
+import { buildServer, type BuildServerOptions } from './server.js';
 
 const DEFAULT_API_PORT = 3001;
 
@@ -40,6 +41,7 @@ const host = process.env.API_HOST ?? '0.0.0.0';
 interface Bootstrap {
   app: ReturnType<typeof buildServer>;
   disconnect: () => Promise<void>;
+  reconcile: () => Promise<void>;
 }
 
 /**
@@ -57,6 +59,7 @@ function bootstrap(): Bootstrap {
 
   const config = authConfigFromEnv();
   const prisma = createDatabaseClient({ connectionString: databaseUrlFromEnv() });
+  const infrastructure = infrastructureFromEnv(prisma);
 
   const app = buildServer({
     logger: true,
@@ -73,9 +76,25 @@ function bootstrap(): Bootstrap {
     commerce: {
       services: createCommerceServices({ store: createPrismaCommerceStore(prisma) }),
     },
+    ...(infrastructure === undefined ? {} : { infrastructure: infrastructure.options }),
   });
 
-  return { app, disconnect: () => prisma.$disconnect() };
+  return { app, disconnect: () => prisma.$disconnect(), reconcile: async () => { if (infrastructure !== undefined) await infrastructure.reconciler.reconcile(); } };
+}
+
+function infrastructureFromEnv(prisma: ReturnType<typeof createDatabaseClient>): { options: NonNullable<BuildServerOptions['infrastructure']>; reconciler: InfrastructureReconciler } | undefined {
+  const baseUrl = process.env.NODE_AGENT_URL;
+  const token = process.env.NODE_AGENT_TOKEN;
+  if (baseUrl === undefined && token === undefined) return undefined;
+  if (baseUrl === undefined || token === undefined || token.length < 32) {
+    throw new Error('NODE_AGENT_URL and NODE_AGENT_TOKEN (at least 32 characters) are required together.');
+  }
+  const store = createPrismaInfrastructureStore(prisma);
+  const agent = createHttpNodeAgent({ baseUrl, token });
+  return {
+    options: { instances: new InstanceService(store.instances, agent), nodes: store.nodes, nodeRegistry: new NodeRegistryService(store.nodes, store.credentials), provisioning: new ProvisioningService({ jobs: store.jobs, instances: store.instances, nodes: new NodeScheduler(store.nodes), agent, orders: store.paidOrders }) },
+    reconciler: new InfrastructureReconciler({ jobs: store.jobs, instances: store.instances, agent }),
+  };
 }
 
 function bootstrapOrExit(): Bootstrap {
@@ -91,7 +110,7 @@ function bootstrapOrExit(): Bootstrap {
   }
 }
 
-const { app, disconnect } = bootstrapOrExit();
+const { app, disconnect, reconcile } = bootstrapOrExit();
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   app.log.info({ signal }, 'Shutting down the control plane API');
@@ -107,6 +126,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 }
 
 try {
+  await reconcile();
   await app.listen({ host, port: resolveApiPort(process.env.API_PORT) });
 } catch (error) {
   app.log.error({ err: error }, 'Failed to start the control plane API');

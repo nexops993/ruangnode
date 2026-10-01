@@ -15,12 +15,14 @@ export interface InstanceRepository {
   findByIdForUser(userId: string, id: string): Promise<InstanceRecord | null>;
   findOwnerUserId(id: string): Promise<string | null>;
   listForUser(userId: string): Promise<InstanceRecord[]>;
+  listByStatuses(statuses: readonly InstanceRecord['status'][]): Promise<InstanceRecord[]>;
   transition(id: string, from: readonly InstanceRecord['status'][], to: InstanceRecord['status']): Promise<boolean>;
   updateRuntime(id: string, runtimeId: string | null, status: InstanceRecord['status']): Promise<InstanceRecord | null>;
 }
 
 export interface ProvisioningJobRepository {
   findByIdempotencyKey(key: string): Promise<ProvisioningJobRecord | null>;
+  listByStatuses(statuses: readonly ProvisioningJobRecord['status'][]): Promise<ProvisioningJobRecord[]>;
   create(input: Omit<ProvisioningJobRecord, 'id' | 'attemptCount' | 'errorCategory' | 'lastError'>): Promise<ProvisioningJobRecord>;
   markRunning(id: string): Promise<ProvisioningJobRecord | null>;
   markSucceeded(id: string): Promise<ProvisioningJobRecord | null>;

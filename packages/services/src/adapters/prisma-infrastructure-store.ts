@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from '@ruangnode/database';
 import type { InstanceRepository, NodeRepository, PaidOrderReader, ProvisioningJobRepository } from '../infrastructure/ports.js';
-import type { NodeCredentialStore } from '../infrastructure/node-registry.js';
+import { nodeTokenMatches, type NodeCredentialStore } from '../infrastructure/node-registry.js';
 import type { InstanceRecord, NodeRecord, ProvisioningJobRecord } from '../infrastructure/types.js';
 import type { ResourceProfileRecord } from '../resources/types.js';
 
@@ -57,12 +57,14 @@ function build(client: Client): PrismaInfrastructureStore {
     async findByIdForUser(userId, id) { const row = await client.instance.findFirst({ where: { id, userId } }); return row === null ? null : instance(row); },
     async findOwnerUserId(id) { const row = await client.instance.findUnique({ where: { id }, select: { userId: true } }); return row?.userId ?? null; },
     async listForUser(userId) { return (await client.instance.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } })).map(instance); },
+    async listByStatuses(statuses) { return (await client.instance.findMany({ where: { status: { in: [...statuses] } }, orderBy: { createdAt: 'asc' } })).map(instance); },
     async transition(id, from, to) { const result = await client.instance.updateMany({ where: { id, status: { in: [...from] } }, data: { status: to } }); return result.count === 1; },
     async updateRuntime(id, runtimeId, status) { const row = await client.instance.update({ where: { id }, data: { runtimeId, status, ...(status === 'ACTIVE' ? { lastHealthAt: new Date() } : {}) } }); return instance(row); },
   };
 
   const jobs: ProvisioningJobRepository = {
     async findByIdempotencyKey(idempotencyKey) { const row = await client.provisioningJob.findUnique({ where: { idempotencyKey } }); return row === null ? null : job(row); },
+    async listByStatuses(statuses) { return (await client.provisioningJob.findMany({ where: { status: { in: [...statuses] } }, orderBy: { createdAt: 'asc' } })).map(job); },
     async create(input) { return job(await client.provisioningJob.create({ data: input })); },
     async markRunning(id) { const row = await client.provisioningJob.update({ where: { id }, data: { status: 'RUNNING', attemptCount: { increment: 1 }, startedAt: new Date() } }); return job(row); },
     async markSucceeded(id) { const row = await client.provisioningJob.update({ where: { id }, data: { status: 'SUCCEEDED', completedAt: new Date() } }); return job(row); },
@@ -71,7 +73,7 @@ function build(client: Client): PrismaInfrastructureStore {
 
   const credentials: NodeCredentialStore = {
     async saveHash(nodeId: string, tokenHash: string) { await client.node.update({ where: { id: nodeId }, data: { agentTokenHash: tokenHash } }); },
-    async matches(nodeId: string, tokenHash: string) { const row = await client.node.findUnique({ where: { id: nodeId }, select: { agentTokenHash: true } }); return row?.agentTokenHash === tokenHash; },
+    async matches(nodeId: string, tokenHash: string) { const row = await client.node.findUnique({ where: { id: nodeId }, select: { agentTokenHash: true } }); return row?.agentTokenHash === null || row?.agentTokenHash === undefined ? false : nodeTokenMatches(row.agentTokenHash, tokenHash); },
   };
 
   const paidOrders: PaidOrderReader = {

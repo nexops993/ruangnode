@@ -1,5 +1,5 @@
 import type { AuthService } from '@ruangnode/auth';
-import type { InstanceService, NodeRecord, NodeRegistryService, NodeRepository } from '@ruangnode/services';
+import type { InstanceService, NodeRecord, NodeRegistryService, NodeRepository, ProvisioningService } from '@ruangnode/services';
 import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from 'fastify';
 import type { SessionCookieConfig } from '../auth/config.js';
 import { authContextOf, requireAuth, requireRole, requireOwnership } from '../auth/guards.js';
@@ -8,6 +8,7 @@ export interface InfrastructureRoutesOptions {
   instances: InstanceService;
   nodes: NodeRepository;
   nodeRegistry: NodeRegistryService;
+  provisioning?: ProvisioningService;
 }
 
 const idSchema = { type: 'string', minLength: 1 } as const;
@@ -24,6 +25,12 @@ export function registerInfrastructureRoutes(app: FastifyInstance, options: Infr
 
   app.register((scope) => {
     scope.get('/instances', { preHandler: authenticate }, async (request) => data({ instances: await options.instances.listForUser(authContextOf(request).user.id) }));
+    scope.post('/instances/provision', { preHandler: authenticate }, async (request, reply) => {
+      if (options.provisioning === undefined) throw new Error('Provisioning is not configured.');
+      const body = request.body as { orderId: string; productVariantId: string; idempotencyKey: string };
+      const result = await options.provisioning.provision({ orderId: body.orderId, userId: authContextOf(request).user.id, productVariantId: body.productVariantId, idempotencyKey: body.idempotencyKey });
+      return reply.status(202).send(data({ job: result }));
+    });
     scope.get('/instances/:id', { schema: { params: idParams }, preHandler: authenticate }, async (request) => data({ instance: await options.instances.getForUser(authContextOf(request).user.id, idOf(request)) }));
     scope.post('/instances/:id/start', { schema: { params: idParams }, preHandler: authenticate }, async (request) => data({ instance: await options.instances.start(authContextOf(request).user.id, idOf(request)) }));
     scope.post('/instances/:id/stop', { schema: { params: idParams }, preHandler: authenticate }, async (request) => data({ instance: await options.instances.stop(authContextOf(request).user.id, idOf(request)) }));

@@ -26,6 +26,9 @@ allowBuilds:
   esbuild: true
   prisma: true
   '@prisma/engines': true
+  ssh2: true
+  protobufjs: true
+  'cpu-features': true
 
 catalog:
   # Toolchain

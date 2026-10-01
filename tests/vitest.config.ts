@@ -10,5 +10,7 @@ export default defineConfig({
     name: 'integration',
     environment: 'node',
     include: ['integration/**/*.test.ts'],
+    fileParallelism: false,
+    maxWorkers: 1,
   },
 });

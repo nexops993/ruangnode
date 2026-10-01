@@ -79,6 +79,7 @@ export * from './infrastructure/instance-service.js';
 export * from './infrastructure/node-registry.js';
 export * from './infrastructure/ports.js';
 export * from './infrastructure/provisioning-service.js';
+export * from './infrastructure/reconciler.js';
 export * from './infrastructure/scheduler.js';
 export * from './infrastructure/storage.js';
 export * from './infrastructure/types.js';
